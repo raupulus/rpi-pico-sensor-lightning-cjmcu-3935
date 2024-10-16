@@ -37,31 +37,33 @@
 # usando el chip AS3935 por i2c en raspberry pi pico w con micropython.
 
 
-from machine import Pin
-import datetime
+from machine import Pin, I2C, SPI
+import utime
 from time import sleep_ms
-from SensorCJMCUAS3935 import SensorCJMCUAS3935
+from Models.SensorCJMCUAS3935 import SensorCJMCUAS3935
 
 
 class Lightning:
     sensor = None
     lightnings = []
 
-    def __init__(self, sda=20, scl=21, pin_irq=26, debug=False, indoor=True):
+    def __init__(self, i2c=None, spi=None, address=None, pin_irq=26,
+                 debug=False, indoor=True):
         # Marco el modo debug para el modelo.
         self.DEBUG = debug
 
         # Instancio el sensor como atributo de este modelo.
-        self.sensor = SensorCJMCUAS3935(address=0x03, scl=scl, sda=sda, debug=debug, indoor=indoor)
+        self.sensor = SensorCJMCUAS3935(spi=spi, address=address, debug=True)
+        #self.sensor = SensorCJMCUAS3935(i2c=i2c, address=address, debug=True)
 
         # Aplico parámetros de configuración para que trabaje el sensor.
-        sleep_ms(200)
+        sleep_ms(500)
         self.sensor.set_indoors(indoor)
-        sleep_ms(200)
+        sleep_ms(500)
         self.sensor.set_noise_floor(0)
-        sleep_ms(200)
+        sleep_ms(500)
         self.sensor.calibrate(tun_cap=0x0F)
-        sleep_ms(1000)
+        sleep_ms(500)
 
         # Configuro el pin de interrupción cuando se detecta eventos
         pin = Pin(pin_irq, Pin.IN, Pin.PULL_UP)
@@ -82,12 +84,13 @@ class Lightning:
         sensor = self.sensor
 
         # Momento actual en formato timestamp.
-        now = datetime.datetime.utcnow()
+        now = utime.time()
 
         reason = sensor.get_interrupt()
 
         if reason == 0x01:
-            sensor.raise_noise_floor()
+            # TODO: Implementar
+            #sensor.raise_noise_floor()
 
             if self.DEBUG:
                 print('El nivel de ruido es demasiado alto → Ajustando')
@@ -113,7 +116,7 @@ class Lightning:
                 "distance": self.get_distance(),
                 "type": self.get_type(),
                 "energy": self.get_energy(),
-                "created_at": datetime.datetime.utcnow
+                "created_at": utime.time()
             })
 
             if self.DEBUG:
