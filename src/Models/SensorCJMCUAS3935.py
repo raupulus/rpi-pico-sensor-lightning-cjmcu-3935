@@ -1,30 +1,40 @@
-from machine import Pin, I2C
+from machine import Pin, SPI, I2C
+from time import sleep_ms
 
+#https://www.embeddedadventures.com/datasheets/AS3935_Datasheet_EN_v2.pdf
 
 class SensorCJMCUAS3935:
-    def __init__ (self, address, sda=20, scl=21, debug=False):
+    def __init__ (self, i2c=None, spi=None, address=None, debug=False):
         """Inicializa la instancia del sensor CJMCU AS3935.
+
+        Uno de `i2c` o `spi` debe ser proporcionado.
 
         Parameters
         ----------
-        address : int
-            Dirección I2C del sensor
-        sda : int, optional
-            Pin de datos I2C, por defecto 20
-        scl : int, optional
-            Pin de reloj I2C, por defecto 21
+        i2c : I2C, optional
+            Instancia configurada de I2C.
+        spi : SPI, optional
+            Instancia configurada de SPI.
+        address : int, optional
+            Dirección I2C del sensor o pin CS para SPI
         debug : bool, optional
-            Si es True, se imprimirán información de depuración, por defecto False
+            Si es True, mostrará información de depuración, por defecto False
         """
         self.DEBUG = debug
-        self.address = address
-        # Preparo la conexión i2c
-        self.i2c = I2C(0, scl=Pin(scl), sda=Pin(sda), freq=400000)
+        self.i2c = i2c
+        self.spi = spi
 
-        # Imprime información de depuración si DEBUG es True
-        if self.DEBUG:
-            print('Escaneando dispositivos i2c en el bus:')
-            print(self.i2c.scan())
+        if i2c is not None:
+            self.address = address
+            # Imprime información de depuración si DEBUG es True
+            if self.DEBUG:
+                print('Escaneando dispositivos I2C en el bus:')
+                print(self.i2c.scan())
+        elif spi is not None:
+            self.cs = Pin(address, Pin.OUT)
+        else:
+            raise ValueError(
+                "Uno de los argumentos i2c o spi debe ser proporcionado.")
 
         # Inicializa la estructura de los registros
         self.registers = bytearray(8)
@@ -38,12 +48,29 @@ class SensorCJMCUAS3935:
             Valor entre 0 y 15 para configurar los condensadores internos de ajuste (0-120pF en pasos de 8pF).
             Si se pasa None, se calibrará automáticamente usando una fuente de reloj interna, por defecto None.
         """
+        """Calibra el sensor AS3935."""
+        sleep_ms(80)
         self.read_data()
-        if tun_cap is not None and 0 <= tun_cap < 0x10:
-            self.set_byte(0x08, (self.registers[0x08] & 0xF0) | tun_cap)
-        elif tun_cap is None:
-            self.set_byte(0x08, self.registers[0x08] | 0x20)
+
+        # Verifica que se han leído los registros correctamente
+        if len(self.registers) < 9:
+            raise Exception(
+                "No se leyeron correctamente los registros del sensor")
+
+        if tun_cap is not None:
+            if 0 <= tun_cap < 16:
+                self.set_byte(0x08, (self.registers[0x08] & 0xF0) | tun_cap)
+                sleep_ms(2)
+            else:
+                raise ValueError("TUN_CAP debe estar entre 0 y 15")
+
         self.set_byte(0x3D, 0x96)
+        sleep_ms(2)
+        self.read_data()
+        self.set_byte(0x08, self.registers[0x08] | 0x20)
+        sleep_ms(2)
+        self.set_byte(0x08, self.registers[0x08] & 0xDF)
+        sleep_ms(2)
 
     def reset (self):
         """Restablece todos los registros a su valor predeterminado en la alimentación."""
@@ -78,7 +105,7 @@ class SensorCJMCUAS3935:
             Valor entre 0-63 estimando la distancia hasta el evento de rayo en kilómetros, un valor de 63 significa fuera de rango.
         """
         self.read_data()
-        return self.registers[0x07] & 0x3F
+        return (self.registers[0x07] & 0x3F) if (self.registers[0x07] & 0x3F) != 0x3F else False
 
     def get_energy (self):
         """Obtiene la energía calculada del evento de rayo más reciente.
@@ -89,8 +116,7 @@ class SensorCJMCUAS3935:
             Valor de energía calculado del evento de rayo.
         """
         self.read_data()
-        return ((self.registers[0x06] & 0x1F) << 16) | (
-                self.registers[0x05] << 8) | self.registers[0x04]
+        return ((self.registers[0x06] & 0x1F) << 16) | (self.registers[0x05] << 8) | self.registers[0x04]
 
     def get_noise_floor (self):
         """Obtiene el valor del piso de ruido.
@@ -122,7 +148,7 @@ class SensorCJMCUAS3935:
         Returns
         -------
         bool
-            Verdadero si está configurado para interiores, falso en caso contrario.
+            True si está configurado para interiores, False en caso contrario.
         """
         self.read_data()
         return bool(self.registers[0x00] & 0x20)
@@ -133,19 +159,27 @@ class SensorCJMCUAS3935:
         Parameters
         ----------
         indoors : bool
-            Verdadero para configurar el sensor para interiores, falso para exteriores.
+            True para configurar el sensor para interiores, False para exteriores.
         """
         self.read_data()
         write_value = (self.registers[0x00] & 0xC1) | (
             0x24 if indoors else 0x1C)
         self.set_byte(0x00, write_value)
 
-    def set_byte (self, register, value):
-        """Escribe un byte en una dirección de registro específica del sensor.
+    def set_byte(self, register, value):
+        """Escribe un byte en una dirección de registro específica del sensor."""
+        if register < len(self.registers):
+            if self.i2c is not None:
+                self.i2c.writeto(self.address, bytes([register, value]))
+            elif self.spi is not None:
+                self.cs.value(0)  # CS en LOW
+                sleep_ms(1)  # Espera para estabilizar
 
-        Este método rara vez se debe usar directamente.
-        """
-        self.i2c.writeto(self.address, bytes([register, value]))
+                self.spi.write(bytes([register | 0x80,
+                                      value]))  # Ajusta para operación de escritura
+                self.cs.value(1)  # CS en HIGH
+        else:
+            raise IndexError(f"Registro fuera de rango: {register}")
 
     def read_data (self):
         """Lee un bloque de datos desde el sensor y lo almacena.
@@ -154,22 +188,33 @@ class SensorCJMCUAS3935:
 
         Este método raramente debería ser llamado directamente.
         """
-        self.i2c.readfrom_into(self.address, self.registers)
+        if self.i2c is not None:
+            self.i2c.readfrom_into(self.address, self.registers)
+        elif self.spi is not None:
+            self.cs.value(0)  # CS en LOW
+            sleep_ms(1)  # Espera para estabilizar
+
+            # Envía el comando de lectura
+            self.spi.write(bytes([0x00]))  # Comando para leer registros
+            self.spi.readinto(self.registers)  # Lee los registros en el buffer
+            self.cs.value(1)  # CS en HIGH
+            print("Registros leídos:", self.registers)
+
+
 
     def set_mask_disturber (self, mask_dist):
         """
-        Establece si los perturbadores deben ser enmascarados (sin interrupciones para
+        Establece si los perturbadores deben ser enmascarados (no interrupciones para
         lo que el sensor determina son eventos de origen humano)
 
         Parameters
         ----------
         mask_dist : bool
-            Si es True, se enmascaran los eventos de perturbación. Si es False, los eventos de perturbaciones generan una interrupción.
+            Si es True, enmascara los eventos de perturbación. Si es False, eventos de perturbaciones generan una interrupción.
         """
         self.read_data()
-        write_value = self.registers[0x03] | 0x20 if mask_dist else \
-            self.registers[0x03] & 0xDF
-        self.set_byte(0x03, write_value)
+        self.set_byte(0x03, (self.registers[0x03] | 0x20) if mask_dist else
+        self.registers[0x03] & 0xDF)
 
     def get_mask_disturber (self):
         """
@@ -178,7 +223,7 @@ class SensorCJMCUAS3935:
         Returns
         -------
         bool
-            True si las interrupciones están enmascaradas, false en caso contrario.
+            True si las interrupciones están enmascaradas, False en caso contrario.
         """
         self.read_data()
         return bool(self.registers[0x03] & 0x20)
@@ -190,7 +235,7 @@ class SensorCJMCUAS3935:
         Parameters
         ----------
         display_lco : bool
-            Si es True, habilita la salida. Si es False la deshabilita.
+            Si es True, habilita la salida. Si es False, la deshabilita.
         """
         self.read_data()
         self.set_byte(0x08, (self.registers[0x08] | 0x80) if display_lco else
