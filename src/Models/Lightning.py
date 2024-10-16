@@ -37,7 +37,7 @@
 # usando el chip AS3935 por i2c en raspberry pi pico w con micropython.
 
 
-from machine import Pin, I2C
+from machine import Pin
 import datetime
 from time import sleep_ms
 from SensorCJMCUAS3935 import SensorCJMCUAS3935
@@ -47,36 +47,27 @@ class Lightning:
     sensor = None
     lightnings = []
 
-    def __init__(self, scl=21, sda=20, debug=False, indoor=True,
-                 pin_irq=26):
+    def __init__(self, sda=20, scl=21, pin_irq=26, debug=False, indoor=True):
         # Marco el modo debug para el modelo.
         self.DEBUG = debug
 
-        # Aplico parámetros de configuración para que trabaje el modelo.
+        # Instancio el sensor como atributo de este modelo.
+        self.sensor = SensorCJMCUAS3935(address=0x03, scl=scl, sda=sda, debug=debug, indoor=indoor)
+
+        # Aplico parámetros de configuración para que trabaje el sensor.
         sleep_ms(200)
-        #self.sensor.set_indoors(indoor)
+        self.sensor.set_indoors(indoor)
         sleep_ms(200)
-        #self.sensor.set_noise_floor(0)
+        self.sensor.set_noise_floor(0)
         sleep_ms(200)
-        #self.sensor.calibrate(tun_cap=0x0F)
+        self.sensor.calibrate(tun_cap=0x0F)
         sleep_ms(1000)
-
-        # Preparo la conexión i2c
-        i2c = I2C(0, scl=Pin(scl), sda=Pin(sda), freq=400000)
-
-        if self.DEBUG:
-            print('Escaneando dispositivos i2c en el bus:')
-            print(self.i2c.scan())
 
         # Configuro el pin de interrupción cuando se detecta eventos
         pin = Pin(pin_irq, Pin.IN, Pin.PULL_UP)
 
         # Inicio Callback para en cada detección registrar rayo
         pin.irq(trigger=Pin.IRQ_FALLING, handler=self.handle_interrupt)
-
-        # Instancio el sensor como atributo de este modelo.
-        self.sensor = SensorCJMCUAS3935(scl=21, sda=20, debug=False, indoor=True,
-                 pin_irq=26)  # Todo: plantear sensor
 
         if self.DEBUG:
             print('Inicializado sensor de rayos y esperando detectar campos electromagnéticos para procesarlos.')
@@ -118,10 +109,10 @@ class Lightning:
         elif reason == 0x08:
             # En este punto, parece una detección correcta y la guardo.
             self.lightnings.append({
-                "strike": self.strike(),
-                "distance": self.distance(),
-                "type": self.type(),
-                "energy": self.energy(),
+                "noise_floor": self.get_noise_floor(),
+                "distance": self.get_distance(),
+                "type": self.get_type(),
+                "energy": self.get_energy(),
                 "created_at": datetime.datetime.utcnow
             })
 
@@ -138,26 +129,31 @@ class Lightning:
                 print('Distance:' + str(self.sensor.get_distance()))
                 print('Interrupt:' + str(self.sensor.get_interrupt()))
                 print('Energy:' + str(self.sensor.get_energy()))
-                print('Noise Floor:' + str(self.sensor.get_noise_floor()))
+                print('Ruido:' + str(self.sensor.get_noise_floor()))
                 print('In Indoor:' + str(self.sensor.get_indoors()))
-                print(
-                    'Mask Disturber:' + str(self.sensor.get_mask_disturber()))
-                print('Dis.lco:' + str(self.sensor.get_disp_lco()))
+                print('Mask Disturber:' + str(self.sensor.get_mask_disturber()))
                 print('--------------------------')
         else:
             if self.DEBUG:
                 print('Se ha detectado algo no controlado aún')
 
-    def strike(self):
-        return None
+    def check_exist_strike(self) -> bool:
+        """
+        Devuelve si ha ocurrido un evento de detección de rayos nuevo.
+        :return:
+        """
+        return len(self.lightnings) > 0
 
-    def distance(self):
+    def get_noise_floor(self) -> int:
+        return self.sensor.get_noise_floor()
+
+    def get_distance(self):
         return self.sensor.get_distance()
 
-    def type(self):
+    def get_type(self):
         return self.sensor.get_interrupt()
 
-    def energy(self):
+    def get_energy(self):
         return self.sensor.get_energy()
 
     def get_all_datas(self):

@@ -18,7 +18,7 @@ controller = RpiPico(ssid=env.AP_NAME, password=env.AP_PASS, debug=env.DEBUG,
 
 sleep_ms(20)
 
-sensor = Lightning(pin_irq=22)
+sensor = Lightning(sda=20, scl=21, pin_irq=22, debug=False, indoor=True)
 
 
 sleep_ms(3000)
