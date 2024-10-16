@@ -3,6 +3,7 @@ import gc
 from time import sleep_ms
 from Models.Api import Api
 from Models.RpiPico import RpiPico
+from Models.Lightning import Lightning
 
 # Importo variables de entorno
 import env
@@ -16,6 +17,13 @@ controller = RpiPico(ssid=env.AP_NAME, password=env.AP_PASS, debug=env.DEBUG,
                      hostname="Lightning Sensor")
 
 sleep_ms(20)
+
+sensor = Lightning(pin_irq=22)
+
+
+sleep_ms(3000)
+
+exit()
 
 # Api
 api = Api(controller=controller, url=env.API_URL, path=env.API_PATH,
