@@ -3,7 +3,7 @@
 #
 import urequests
 #import ujson
-
+import utime
 
 class Api:
     """
@@ -25,32 +25,46 @@ class Api:
         self.CONTROLLER = controller
         self.DEBUG = debug
 
-    def save_lightning (self) -> bool:
+    def save_lightnings (self, lightnings) -> bool:
         """
         Guarda los datos en la API.
         :return:
         """
-        try:
+        headers = {
+            "Authorization": "Bearer " + self.TOKEN,
+            "Content-Type": "application/json"
+        }
 
-            headers = {
-                "Authorization": "Bearer " + self.TOKEN,
-                "Device-Id": str(self.DEVICE_ID)
+        url = self.URL + '/' + self.URL_PATH
+
+        try:
+            # Preparo cuanto hace de la lectura del rayo
+            for lightning in lightnings:
+                lightning["read_seconds_ago"] = (utime.time() - lightning["timestamp_read"]) + 1
+
+            payload = {
+                "lightnings": lightnings,
+                "hardware_device_id": self.DEVICE_ID
             }
 
-            url = self.URL + self.URL_PATH
+            if self.DEBUG:
+                print('Enviando datos a la API:', payload)
 
-            # TODO: esto tiene que hacerse POST y enviar hardware_device_id
-
-            response = urequests.get(url, headers=headers)
-
-            #data = ujson.loads(response.text)
+            response = urequests.post(url, headers=headers, json=payload)
 
             if self.DEBUG:
-                print('Respuesta de la API:', response)
+                print('Respuesta de la API:', response.text)
+
             if response.status_code == 201:
                 return True
+            else:
+                return False
 
         except Exception as e:
             if self.DEBUG:
+                print('')
                 print("Error al obtener los datos de la api: ", e)
+                print("lightnings: ", lightnings)
+                print('')
+
             return False
