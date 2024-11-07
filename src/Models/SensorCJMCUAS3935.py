@@ -2,6 +2,8 @@ from machine import Pin, SPI, I2C
 from time import sleep_ms
 
 #https://www.embeddedadventures.com/datasheets/AS3935_Datasheet_EN_v2.pdf
+#https://www.improwis.com/projects/sw_chip_AS3935/
+#https://www.improwis.com/projects/sw_chip_AS3935/as3935.py
 
 class SensorCJMCUAS3935:
     def __init__ (self, i2c=None, spi=None, address=None, debug=False):
@@ -26,7 +28,7 @@ class SensorCJMCUAS3935:
 
         if i2c is not None:
             self.address = address
-            # Imprime información de depuración si DEBUG es True
+
             if self.DEBUG:
                 print('Escaneando dispositivos I2C en el bus:')
                 print(self.i2c.scan())

@@ -40,36 +40,38 @@
 from machine import Pin, I2C, SPI
 import utime
 from time import sleep_ms
-from Models.SensorCJMCUAS3935 import SensorCJMCUAS3935
+from Models.SensorCJMCUAS3935_4 import SensorCJMCUAS3935
 
 
 class Lightning:
     sensor = None
     lightnings = []
 
-    def __init__(self, i2c=None, spi=None, address=None, pin_irq=26,
+    def __init__(self, i2c=None, address=None, pin_irq=26,
                  debug=False, indoor=True):
         # Marco el modo debug para el modelo.
         self.DEBUG = debug
 
         # Instancio el sensor como atributo de este modelo.
-        self.sensor = SensorCJMCUAS3935(spi=spi, address=address, debug=True)
-        #self.sensor = SensorCJMCUAS3935(i2c=i2c, address=address, debug=True)
-
-        # Aplico parámetros de configuración para que trabaje el sensor.
-        sleep_ms(500)
-        self.sensor.set_indoors(indoor)
-        sleep_ms(500)
-        self.sensor.set_noise_floor(0)
-        sleep_ms(500)
-        self.sensor.calibrate(tun_cap=0x0F)
-        sleep_ms(500)
+        self.sensor = (SensorCJMCUAS3935(i2c=i2c, address=address, debug=True,indoor=indoor))
 
         # Configuro el pin de interrupción cuando se detecta eventos
         pin = Pin(pin_irq, Pin.IN, Pin.PULL_UP)
 
         # Inicio Callback para en cada detección registrar rayo
         pin.irq(trigger=Pin.IRQ_FALLING, handler=self.handle_interrupt)
+
+        """
+        self.lightnings.append({
+            "noise_floor": 2,
+            "distance": 3,
+            "type": 1,
+            "energy": 123123,
+            "timestamp_read": utime.time(),
+        })
+
+        sleep_ms(1000)
+        """
 
         if self.DEBUG:
             print('Inicializado sensor de rayos y esperando detectar campos electromagnéticos para procesarlos.')
@@ -83,14 +85,73 @@ class Lightning:
         sleep_ms(30)
         sensor = self.sensor
 
-        # Momento actual en formato timestamp.
+        # Momento actual en formato timestamp respecto a inicio del microcontrolador.
         now = utime.time()
 
-        reason = sensor.get_interrupt()
+        reason = sensor.get_interrupt_src()
 
+        if reason == 1:
+            # En este punto, parece una detección correcta y la guardo.
+            self.lightnings.append({
+                "noise_floor": self.get_noise_floor(),
+                "distance": self.get_distance(),
+                "type": self.get_type(),
+                "energy": self.get_energy(),
+                "timestamp_read": utime.time(),
+            })
+
+            if self.DEBUG:
+                distance = sensor.get_distance()
+
+                print('--------------------------')
+                print('¡Se ha detectado un posible RAYO!')
+                print('Timestamp: ' + str(now))
+                print("Está a " + str(distance) + "km de distancia.")
+                print("------------------------")
+                print("All Data:")
+                print('Distance:' + str(distance))
+                print('Interrupt: 3')
+                print('Energy:' + str(self.sensor.get_energy()))
+                print('Ruido:' + str(self.sensor.get_noise_floor()))
+                # print('In Indoor:' + str(self.sensor.get_indoors()))
+                # print('Mask Disturber:' + str(self.sensor.get_mask_disturber()))
+                print('--------------------------')
+
+        elif reason == 2:
+            # Perturbador detectado
+
+            #sensor.set_noise_floor(self.get_noise_floor() + 1)
+            #sensor.set_watchdog_threshold(sensor.get_watchdog_threshold() + 1)
+            #sensor.set_spike_rejection(sensor.get_spike_rejection() + 1)
+
+            if self.DEBUG:
+                print('--------------------------')
+                print('Se ha detectado una perturbación → Enmascarándola')
+                print('Timestamp: ' + str(now))
+                print('--------------------------')
+        elif reason == 3:
+            # Ruido demasiado alto
+
+            #sensor.set_noise_floor(self.get_noise_floor() + 1)
+            # sensor.set_watchdog_threshold(sensor.get_watchdog_threshold() + 1)
+            # sensor.set_spike_rejection(sensor.get_spike_rejection() + 1)
+
+            if self.DEBUG:
+                print('El nivel de ruido es demasiado alto → Ajustando')
+
+                print('--------------------------')
+                print('El nivel de ruido es demasiado alto → Calibrando')
+                print('Timestamp: ' + str(now))
+                print('--------------------------')
+        else:
+            if self.DEBUG:
+                print(
+                    'Se ha detectado algo no controlado aún, ¿Has provocado el irq?')
+
+        """
         if reason == 0x01:
-            # TODO: Implementar
-            #sensor.raise_noise_floor()
+            # TODO: Implementar? Ver más exactamente que ha ocurrido?
+            sensor.raise_noise_floor()
 
             if self.DEBUG:
                 print('El nivel de ruido es demasiado alto → Ajustando')
@@ -116,7 +177,7 @@ class Lightning:
                 "distance": self.get_distance(),
                 "type": self.get_type(),
                 "energy": self.get_energy(),
-                "created_at": utime.time()
+                "timestamp_read": utime.time(),
             })
 
             if self.DEBUG:
@@ -125,8 +186,7 @@ class Lightning:
                 print('--------------------------')
                 print('¡Se ha detectado un posible RAYO!')
                 print('Timestamp: ' + str(now))
-                print('rayo detectado')
-                print("Está a " + str(distance) + "km de distancia. (%s)" % now)
+                print("Está a " + str(distance) + "km de distancia.")
                 print("------------------------")
                 print("All Data:")
                 print('Distance:' + str(self.sensor.get_distance()))
@@ -138,7 +198,8 @@ class Lightning:
                 print('--------------------------')
         else:
             if self.DEBUG:
-                print('Se ha detectado algo no controlado aún')
+                print('Se ha detectado algo no controlado aún, ¿Has provocado el irq?')
+    """
 
     def check_exist_strike(self) -> bool:
         """
@@ -154,10 +215,18 @@ class Lightning:
         return self.sensor.get_distance()
 
     def get_type(self):
-        return self.sensor.get_interrupt()
+        return self.sensor.get_interrupt_src()
 
     def get_energy(self):
         return self.sensor.get_energy()
+
+
+    def clear_datas(self):
+        """
+
+        :return:
+        """
+        self.lightnings = []
 
     def get_all_datas(self):
         """
@@ -167,7 +236,8 @@ class Lightning:
 
         if self.lightnings and len(self.lightnings):
             reads = self.lightnings
-            self.lightnings = []
+
+            self.clear_datas()
 
             return reads
 
