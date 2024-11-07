@@ -3,6 +3,8 @@ from time import sleep_ms
 from Models.Api import Api
 from Models.RpiPico import RpiPico
 from Models.Lightning import Lightning
+from Models.SSD1306 import SSD1306_I2C as SSD1306
+
 
 # Importo variables de entorno
 import env
@@ -21,14 +23,24 @@ controller = RpiPico(ssid=env.AP_NAME, password=env.AP_PASS, debug=env.DEBUG,
 sleep_ms(20)
 
 i2c = I2C(0, scl=Pin(21), sda=Pin(20), freq=400000)
-address = 0x03 # Dirección del dispositivo i2c
-# Escanear el bus I2C en busca de dispositivos
-#devices = i2c.scan()
+address = 0x03 # Dirección del dispositivo i2c para AS3935
 
 
-#spi = SPI(0, baudrate=2000000, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
-#spi = SPI(0, sck=Pin(2), mosi=Pin(3), miso=Pin(4))
-#address = 5 # CS Pin en el caso de SPI
+
+# Inicializando pantalla OLED
+DISPLAY_ENABLED = True
+
+if DISPLAY_ENABLED:
+    oled_width = 128
+    oled_height = 64
+    oled_address = 0x3c
+    oled = SSD1306(oled_width, oled_height, i2c, addr=oled_address)
+
+    oled.text('Esperando Eventos', 0, 0)
+
+    oled.show()
+
+
 
 sleep_ms(500)
 sensor = Lightning(i2c=i2c, address=address, pin_irq=22, debug=env.DEBUG,
@@ -52,6 +64,21 @@ def thread0 ():
     controller.led_on()
 
     if sensor.check_exist_strike():
+
+        if DISPLAY_ENABLED:
+            last_strike = sensor.lightnings[0]
+
+            print(last_strike)
+
+            oled.fill(0)
+            oled.text('Hay ' + str(len(sensor.lightnings)) + ' rayos', 0, 0)
+            oled.text('Distance: ' + str(last_strike.get('distance')) + 'km', 0, 10)
+            oled.text('Energy: ' + str(last_strike.get('energy')) + 'J', 0, 20)
+            oled.text('Noise: ' + str(last_strike.get('noise_floor')), 0, 30)
+            oled.text('Type: ' + str(last_strike.get('type')), 0, 40)
+
+            oled.show()
+
         if env.DEBUG:
             print('Se han detectado rayos, se guardan en la API')
             print(sensor.lightnings)

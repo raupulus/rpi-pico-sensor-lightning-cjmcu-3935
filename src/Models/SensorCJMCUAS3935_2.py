@@ -1,6 +1,7 @@
 import utime
 
 
+#https://github.com/ecodina/python_as3935/blob/master/as3935/AS3935.py
 
 
 INT_NH = 0b0001

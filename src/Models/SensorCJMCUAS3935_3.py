@@ -1,254 +1,405 @@
-
+#https://github.com/DFRobot/DFRobot_AS3935/blob/master/MicroPython/DFRobot_AS3935_Lib.py
 import utime
+from utime import sleep_ms
 
 
 class SensorCJMCUAS3935:
-    def __init__ (self, i2c, address=0x03, debug=False):
+    def __init__ (self, i2c, address=0x03, debug=False, indoor=True):
         """
-        Configure the main parameters of AS3935.
+        Configura los parámetros principales del AS3935.
 
         :param i2c: (I2C) Instancia configurada de I2C.
-        :param address: (int, optional) Dirección del dispositivo I2C. Default = 0x03
-        :param debug: (bool, optional) Indica si habilita depuración y logs. Default = False
+        :param address: (int, opcional) Dirección del dispositivo I2C. Predeterminado = 0x03
+        :param debug: (bool, opcional) Indica si habilita depuración y logs. Predeterminado = False
+        :param indoor: (bool, opcional) Establece si se inicializa en modo para interior. Predeterminado = True
         """
+        self.register = None
         self.address = address
         self.i2cbus = i2c
         self.DEBUG = debug
 
-    def writeByte (self, register, value):
+        self.power_up()
+        sleep_ms(200)
+
+        if indoor:
+            self.standard_indoor()
+        else:
+            self.standard_outdoor()
+
+        # Para debug conectar IRQ y GND al osciloscopio y probar con esta configuración:
+        # This will dispaly the antenna's resonance frequency/16 on IRQ pin (The resonance frequency will be divided by 16 on this pin)
+        # Tuning AS3935_CAPACITANCE to make the frequency within 500/16 kHz plus 3.5% to 500/16 kHz minus 3.5%
+        #self.set_lco_fdiv(0)
+        #self.set_irq_output_source(3)
+
+    def standard_indoor (self):
+        self.set_indoors()
+        # self.sensor.set_outdoors()
+        self.disturber_en()
+        # self.sensor.disturber_dis() # Deshabilita detección de perturbadores
+        self.set_irq_output_source(0)
+        sleep_ms(500)
+        # Antenna tuning capacitance (must be integer multiple of 8, 8 - 120 pf)
+        self.set_tuning_caps(96)
+
+        # Set the noise level 1-7
+        self.set_noise_floor(2)
+
+        # Umbral para watchdog (0-15)
+        self.set_watchdog_threshold(2)
+
+        # SREJ Spike Rejection (0-15)
+        self.set_spike_rejection(2)
+
+    def standard_outdoor (self):
+        self.set_outdoors()
+        self.disturber_en()
+        # self.sensor.disturber_dis() # Deshabilita detección de perturbadores
+        self.set_irq_output_source(0)
+        sleep_ms(500)
+        # Antenna tuning capacitance (must be integer multiple of 8, 8 - 120 pf)
+        self.set_tuning_caps(96)
+
+        # Set the noise level 1-7
+        self.set_noise_floor(2)
+
+        # Umbral para watchdog (0-15)
+        self.set_watchdog_threshold(2)
+
+        # SREJ Spike Rejection (0-15)
+        self.set_spike_rejection(2)
+
+    def write_byte (self, register, value):
+        """
+        Escribe un byte en un registro específico.
+
+        :param register: (int) Dirección del registro.
+        :param value: (int) Valor a escribir en el registro.
+        :return: (int) 1 si la escritura fue exitosa, 0 en caso contrario.
+        """
         try:
             self.i2cbus.writeto_mem(self.address, register, bytes([value]))
             return 1
         except:
             return 0
 
-    def readData (self, register):
+    def read_data (self, register):
+        """
+        Lee un byte de un registro específico.
+
+        :param register: (int) Dirección del registro.
+        """
         self.register = self.i2cbus.readfrom_mem(self.address, register, 1)
 
-    def manualCal (self, capacitance, location, disturber):
-        self.powerUp()
+    def manual_cal (self, capacitance, location, disturber):
+        """
+        Realiza una calibración manual del sensor.
+
+        :param capacitance: (int) Valor de capacitancia.
+        :param location: (int) Ubicación, 1 para interiores, 0 para exteriores.
+        :param disturber: (int) Habilitar (1) o deshabilitar (0) la detección de perturbadores.
+        """
+        self.power_up()
         if location == 1:
-            self.setIndoors()
+            self.set_indoors()
         else:
-            self.setOutdoors()
+            self.set_outdoors()
 
         if disturber == 0:
-            self.disturberDis()
+            self.disturber_dis()
         else:
-            self.disturberEn()
+            self.disturber_en()
 
-        self.setIrqOutputSource(0)
+        self.set_irq_output_source(0)
         utime.sleep(0.5)
-        self.setTuningCaps(capacitance)
+        self.set_tuning_caps(capacitance)
 
-    def setTuningCaps (self, capVal):
-        # Assume only numbers divisible by 8 (because that's all the chip supports)
-        if capVal > 120:  # cap_value out of range, assume highest capacitance
-            self.singRegWrite(0x08, 0x0F,
-                              0x0F)  # set capacitance bits to maximum
+    def set_tuning_caps (self, cap_val):
+        """
+        Establece la capacitancia de ajuste.
+
+        :param cap_val: (int) Valor de capacitancia. Solo números divisibles por 8.
+        """
+        if cap_val > 120:  # Valor fuera de rango, asumir máxima capacitancia
+            self.sing_reg_write(0x08, 0x0F,
+                                0x0F)  # Configurar bits de capacitancia al máximo
         else:
-            self.singRegWrite(0x08, 0x0F, capVal >> 3)  # set capacitance bits
+            self.sing_reg_write(0x08, 0x0F,
+                                cap_val >> 3)  # Configurar bits de capacitancia
 
-        self.singRegRead(0x08)
-        # print('capacitance set to 8x%d'%(self.register[0] & 0x0F))
+        self.sing_reg_read(0x08)
 
-    def powerUp (self):
-        # register 0x00, PWD bit: 0 (clears PWD)
-        self.singRegWrite(0x00, 0x01, 0x00)
-        self.calRCO()  # run RCO cal cmd
-        self.singRegWrite(0x08, 0x20, 0x20)  # set DISP_SRCO to 1
+        if self.DEBUG: print(
+            'Capacitancia configurada a 8x%d' % (self.register[0] & 0x0F))
+
+    def power_up (self):
+        """
+        Enciende el sensor.
+        """
+        self.sing_reg_write(0x00, 0x01, 0x00)
+        self.cal_rco()  # Ejecutar comando de calibración RCO
+        self.sing_reg_write(0x08, 0x20, 0x20)  # Configurar DISP_SRCO a 1
         utime.sleep(0.002)
-        self.singRegWrite(0x08, 0x20, 0x00)  # set DISP_SRCO to 0
+        self.sing_reg_write(0x08, 0x20, 0x00)  # Configurar DISP_SRCO a 0
 
-    def powerDown (self):
-        # register 0x00, PWD bit: 0 (sets PWD)
-        self.singRegWrite(0x00, 0x01, 0x01)
+    def power_down (self):
+        """
+        Apaga el sensor.
+        """
+        self.sing_reg_write(0x00, 0x01, 0x01)
 
-    def calRCO (self):
-        self.writeByte(0x3D, 0x96)
+    def cal_rco (self):
+        """
+        Calibra el oscilador de referencia (RCO).
+        """
+        self.write_byte(0x3D, 0x96)
         utime.sleep(0.002)
 
-    def setIndoors (self):
-        self.singRegWrite(0x00, 0x3E, 0x24)
-        print("set to indoors model")
+    def set_indoors (self):
+        """
+        Configura el sensor para operar en interiores.
+        """
+        self.sing_reg_write(0x00, 0x3E, 0x24)
+        if self.DEBUG: print("Configurado para el modelo de interiores")
 
-    def setOutdoors (self):
-        self.singRegWrite(0x00, 0x3E, 0x1C)
-        print("set to outdoors model")
+    def set_outdoors (self):
+        """
+        Configura el sensor para operar en exteriores.
+        """
+        self.sing_reg_write(0x00, 0x3E, 0x1C)
+        if self.DEBUG: print("Configurado para el modelo de exteriores")
 
-    def disturberDis (self):
-        # register 0x03, PWD bit: 5 (sets MASK_DIST)
-        self.singRegWrite(0x03, 0x20, 0x20)
-        print("disenable disturber detection")
+    def disturber_dis (self):
+        """
+        Deshabilita la detección de perturbadores.
+        """
+        self.sing_reg_write(0x03, 0x20, 0x20)
+        if self.DEBUG: print("Detección de perturbadores deshabilitada")
 
-    def disturberEn (self):
-        # register 0x03, PWD bit: 5 (sets MASK_DIST)
-        self.singRegWrite(0x03, 0x20, 0x00)
-        print("enable disturber detection")
+    def disturber_en (self):
+        """
+        Habilita la detección de perturbadores.
+        """
+        self.sing_reg_write(0x03, 0x20, 0x00)
+        if self.DEBUG: print("Detección de perturbadores habilitada")
 
-    def singRegWrite (self, regAdd, dataMask, regData):
-        # start by reading original register data (only modifying what we need to)
-        self.singRegRead(regAdd)
-        # calculate new register data... 'delete' old targeted data, replace with new data
-        # note: 'dataMask' must be bits targeted for replacement
-        # add'l note: this function does NOT shift values into the proper place... they need to be there already
-        newRegData = (self.register[0] & ~dataMask) | (regData & dataMask)
-        # finally, write the data to the register
-        self.writeByte(regAdd, newRegData)
-        # print('wrt: %02x'%newRegData)
-        self.singRegRead(regAdd)
-        # print('Act: %02x'%self.register[0])
+    def sing_reg_write (self, reg_add, data_mask, reg_data):
+        """
+        Escribe datos en un registro específico.
 
-    def singRegRead (self, regAdd):
-        self.readData(regAdd)
+        :param reg_add: (int) Dirección del registro.
+        :param data_mask: (int) Máscara de datos para los bits que se escribirán.
+        :param reg_data: (int) Datos a escribir en el registro.
+        """
+        self.sing_reg_read(reg_add)
+        new_reg_data = (self.register[0] & ~data_mask) | (reg_data & data_mask)
+        self.write_byte(reg_add, new_reg_data)
+        if self.DEBUG: print('Escrito: %02x' % new_reg_data)
+        self.sing_reg_read(reg_add)
+        if self.DEBUG: print('Actual: %02x' % self.register[0])
+
+    def sing_reg_read (self, reg_add):
+        """
+        Lee datos de un registro específico.
+
+        :param reg_add: (int) Dirección del registro.
+        """
+        self.read_data(reg_add)
 
     def get_interrupt_src (self):
-        # definition of interrupt data on table 18 of datasheet
-        # for this function:
-        # 0 = unknown src, 1 = lightning detected, 2 = disturber, 3 = Noise level too high
-        utime.sleep(
-            0.03)  # wait 3ms before reading (min 2ms per pg 22 of datasheet)
-        self.singRegRead(0x03)  # read register, get rid of non-interrupt data
-        intSrc = self.register[0] & 0x0F
-        if intSrc == 0x08:
-            return 1  # lightning caused interrupt
-        elif intSrc == 0x04:
-            return 2  # disturber detected
-        elif intSrc == 0x01:
-            return 3  # Noise level too high
+        """
+        Obtiene la fuente de la interrupción.
+
+        :return: (int) Código identificando la fuente de la interrupción.
+            0 = Fuente desconocida
+            1 = Rayo detectado
+            2 = Perturbador detectado
+            3 = Nivel de ruido demasiado alto
+        """
+        utime.sleep(0.05)  # Esperar 5ms antes de leer (mínimo 2ms)
+        self.sing_reg_read(0x03)
+        int_src = self.register[0] & 0x0F
+
+        if int_src == 0x08:
+            return 1  # Interrupción causada por rayo
+        elif int_src == 0x04:
+            return 2  # Perturbador detectado
+        elif int_src == 0x01:
+            return 3  # Nivel de ruido demasiado alto
         else:
-            return 0  # interrupt result not expected
+            return 0  # Resultado de interrupción no esperado
 
     def reset (self):
-        err = self.writeByte(0x3C, 0x96)
-        utime.sleep(0.002)  # wait 2ms to complete
+        """
+        Reinicia el sensor.
+
+        :return: (int) 1 si el reinicio fue exitoso, 0 en caso contrario.
+        """
+        err = self.write_byte(0x3C, 0x96)
+        utime.sleep(0.002)  # Esperar 2ms para completar
         return err
 
-    def setLcoFdiv (self, fdiv):
-        self.singRegWrite(0x03, 0xC0, (fdiv & 0x03) << 6)
+    def set_lco_fdiv (self, fdiv):
+        """
+        Configura la frecuencia de LCO.
 
-    def setIrqOutputSource (self, irqSelect):
-        # set interrupt source - what to display on IRQ pin
-        # reg 0x08, bits 5 (TRCO), 6 (SRCO), 7 (LCO)
-        # only one should be set at once, I think
-        # 0 = NONE, 1 = TRCO, 2 = SRCO, 3 = LCO
-        if irqSelect == 1:
-            self.singRegWrite(0x08, 0xE0, 0x20)  # set only TRCO bit
-        elif irqSelect == 2:
-            self.singRegWrite(0x08, 0xE0, 0x40)  # set only SRCO bit
-        elif irqSelect == 3:
-            self.singRegWrite(0x08, 0xE0, 0x80)  # set only SRCO bit
+        :param fdiv: (int) Valor de la frecuencia.
+        """
+        self.sing_reg_write(0x03, 0xC0, (fdiv & 0x03) << 6)
+
+    def set_irq_output_source (self, irq_select):
+        """
+        Configura la fuente de salida IRQ.
+
+        :param irq_select: (int) Fuente de interrupción a mostrar en el pin IRQ.
+            0 = NINGUNA
+            1 = TRCO (Oscilador de temporización)
+            2 = SRCO (Oscilador RC de sincronización)
+            3 = LCO (Contador de rayos)
+        """
+        if irq_select == 1:
+            # Establecer solo el bit TRCO (bit 5 en el registro 0x08)
+            self.sing_reg_write(0x08, 0xE0, 0x20)
+        elif irq_select == 2:
+            # Establecer solo el bit SRCO (bit 6 en el registro 0x08)
+            self.sing_reg_write(0x08, 0xE0, 0x40)
+        elif irq_select == 3:
+            # Establecer solo el bit LCO (bit 7 en el registro 0x08)
+            self.sing_reg_write(0x08, 0xE0, 0x80)
         else:
-            self.singRegWrite(0x08, 0xE0, 0x00)  # clear IRQ pin display bits
+            # Limpiar los bits de pantalla IRQ (bits 5, 6 y 7 en el registro 0x08)
+            self.sing_reg_write(0x08, 0xE0, 0x00)
 
     def get_distance (self):
-        self.singRegRead(0x07)  # read register, get rid of non-distance data
+        """
+        Obtiene la distancia estimada del rayo.
+
+        :return: (int) Distancia en kilómetros.
+        """
+        self.sing_reg_read(0x07)
         return self.register[0] & 0x3F
 
     def get_energy (self):
-        self.singRegRead(0x06)  # MMSB, shift 8  bits left, make room for MSB
-        nrgyRaw = (self.register[0] & 0x1F) << 8
-        self.singRegRead(0x05)  # read MSB
-        nrgyRaw |= self.register[0]
-        nrgyRaw <<= 8  # shift 8 bits left, make room for LSB
-        self.singRegRead(0x04)  # read LSB, add to others
-        nrgyRaw |= self.register[0]
+        """
+        Obtiene la energía del rayo detectado.
 
-        return nrgyRaw / 16777
+        :return: (float) Energía del rayo.
+        """
+        self.sing_reg_read(0x06)
+        nrgy_raw = (self.register[0] & 0x1F) << 8
+        self.sing_reg_read(0x05)
+        nrgy_raw |= self.register[0]
+        nrgy_raw <<= 8
+        self.sing_reg_read(0x04)
+        nrgy_raw |= self.register[0]
 
-    def setMinStrikes (self, minStrk):
-        # This function sets min strikes to the closest available number, rounding to the floor,
-        # where necessary, then returns the physical value that was set. Options are 1, 5, 9 or 16 strikes.
-        if minStrk < 5:
-            self.singRegWrite(0x02, 0x30, 0x00)
+        return nrgy_raw / 16777
+
+    def set_min_strikes (self, min_strk):
+        """
+        Configura el número mínimo de descargas detectadas.
+
+        :param min_strk: (int) Número mínimo de descargas.
+        :return: (int) Valor físico configurado (1, 5, 9 o 16 descargas).
+        """
+        if min_strk < 5:
+            self.sing_reg_write(0x02, 0x30, 0x00)
             return 1
-        elif minStrk < 9:
-            self.singRegWrite(0x02, 0x30, 0x10)
+        elif min_strk < 9:
+            self.sing_reg_write(0x02, 0x30, 0x10)
             return 5
-        elif minStrk < 16:
-            self.singRegWrite(0x02, 0x30, 0x20)
+        elif min_strk < 16:
+            self.sing_reg_write(0x02, 0x30, 0x20)
             return 9
         else:
-            self.singRegWrite(0x02, 0x30, 0x30)
+            self.sing_reg_write(0x02, 0x30, 0x30)
             return 16
 
-    def clearStatistics (self):
-        # clear is accomplished by toggling CL_STAT bit 'high-low-high' (then set low to move on)
-        self.singRegWrite(0x02, 0x40, 0x40)  # high
-        self.singRegWrite(0x02, 0x40, 0x00)  # low
-        self.singRegWrite(0x02, 0x40, 0x40)  # high
+    def clear_statistics (self):
+        """
+        Limpia las estadísticas del sensor.
+        """
+        self.sing_reg_write(0x02, 0x40, 0x40)  # alto
+        self.sing_reg_write(0x02, 0x40, 0x00)  # bajo
+        self.sing_reg_write(0x02, 0x40, 0x40)  # alto
 
     def get_noise_floor (self):
-        # NF settings addres 0x01, bits 6:4
-        # default setting of 010 at startup (datasheet, table 9)
-        self.singRegRead(0x01)  # read register 0x01
-        return (self.register[
-                    0] & 0x70) >> 4  # should return value from 0-7, see table 16 for info
+        """
+        Obtiene el nivel de ruido del sensor.
 
-    def set_noise_floor (self, nfSel):
-        # NF settings addres 0x01, bits 6:4
-        # default setting of 010 at startup (datasheet, table 9)
-        if nfSel <= 7:  # nfSel within expected range
-            self.singRegWrite(0x01, 0x70, (nfSel & 0x07) << 4)
-        else:  # out of range, set to default (power-up value 010)
-            self.singRegWrite(0x01, 0x70, 0x20)
+        :return: (int) Nivel de ruido del 0 al 7.
+        """
+        self.sing_reg_read(0x01)
+        return (self.register[0] & 0x70) >> 4
 
-    def getWatchdogThreshold (self):
-        # This function is used to read WDTH. It is used to increase robustness to disturbers,
-        # though will make detection less efficient (see page 19, Fig 20 of datasheet)
-        # WDTH register: add 0x01, bits 3:0
-        # default value of 0010
-        # values should only be between 0x00 and 0x0F (0 and 7)
-        self.singRegRead(0x01)
+    def set_noise_floor (self, nf_sel):
+        """
+        Configura el nivel de ruido del sensor.
+
+        :param nf_sel: (int) Nivel de ruido del 0 al 7.
+        """
+        if nf_sel <= 7:
+            self.sing_reg_write(0x01, 0x70, (nf_sel & 0x07) << 4)
+        else:
+            self.sing_reg_write(0x01, 0x70, 0x20)
+
+    def get_watchdog_threshold (self):
+        """
+        Obtiene el umbral del watchdog.
+
+        :return: (int) Umbral del watchdog del 0 al 15.
+        """
+        self.sing_reg_read(0x01)
         return self.register[0] & 0x0F
 
-    def setWatchdogThreshold (self, wdth):
-        # This function is used to modify WDTH. It is used to increase robustness to disturbers,
-        # though will make detection less efficient (see page 19, Fig 20 of datasheet)
-        # WDTH register: add 0x01, bits 3:0
-        # default value of 0010
-        # values should only be between 0x00 and 0x0F (0 and 7)
-        self.singRegWrite(0x01, 0x0F, wdth & 0x0F)
+    def set_watchdog_threshold (self, wdth):
+        """
+        Configura el umbral del watchdog.
 
-    def getSpikeRejection (self):
-        # This function is used to read SREJ (spike rejection). Similar to the Watchdog threshold,
-        # it is used to make the system more robust to disturbers, though will make general detection
-        # less efficient (see page 20-21, especially Fig 21 of datasheet)
-        # SREJ register: add 0x02, bits 3:0
-        # default value of 0010
-        # values should only be between 0x00 and 0x0F (0 and 7)
-        self.singRegRead(0x02)
+        :param wdth: (int) Umbral del watchdog del 0 al 15.
+        """
+        self.sing_reg_write(0x01, 0x0F, wdth & 0x0F)
+
+    def get_spike_rejection (self):
+        """
+        Obtiene el nivel de rechazo de picos del sensor.
+
+        :return: (int) Nivel de rechazo de picos del 0 al 15.
+        """
+        self.sing_reg_read(0x02)
         return self.register[0] & 0x0F
 
-    def setSpikeRejection (self, srej):
-        # This function is used to modify SREJ (spike rejection). Similar to the Watchdog threshold,
-        # it is used to make the system more robust to disturbers, though will make general detection
-        # less efficient (see page 20-21, especially Fig 21 of datasheet)
-        # WDTH register: add 0x02, bits 3:0
-        # default value of 0010
-        # values should only be between 0x00 and 0x0F (0 and 7)
-        self.singRegWrite(0x02, 0x0F, srej & 0x0F)
+    def set_spike_rejection (self, srej):
+        """
+        Configura el nivel de rechazo de picos del sensor.
 
-    def printAllRegs (self):
-        self.singRegRead(0x00)
-        print("Reg 0x00: %02x" % self.register[0])
-        self.singRegRead(0x01)
-        print("Reg 0x01: %02x" % self.register[0])
-        self.singRegRead(0x02)
-        print("Reg 0x02: %02x" % self.register[0])
-        self.singRegRead(0x03)
-        print("Reg 0x03: %02x" % self.register[0])
-        self.singRegRead(0x04)
-        print("Reg 0x04: %02x" % self.register[0])
-        self.singRegRead(0x05)
-        print("Reg 0x05: %02x" % self.register[0])
-        self.singRegRead(0x06)
-        print("Reg 0x06: %02x" % self.register[0])
-        self.singRegRead(0x07)
-        print("Reg 0x07: %02x" % self.register[0])
-        self.singRegRead(0x08)
-        print("Reg 0x08: %02x" % self.register[0])
-        self.singRegRead(0x3A)
-        print("Reg 0x3A: %02x" % self.register[0])
-        self.singRegRead(0x3B)
-        print("Reg 0x3B: %02x" % self.register[0])
+        :param srej: (int) Nivel de rechazo de picos del 0 al 15.
+        """
+        self.sing_reg_write(0x02, 0x0F, srej & 0x0F)
+
+    def print_all_regs (self):
+        """
+        Imprime todos los registros del sensor.
+        """
+        self.sing_reg_read(0x00)
+        if self.DEBUG: print("Reg 0x00: %02x" % self.register[0])
+        self.sing_reg_read(0x01)
+        if self.DEBUG: print("Reg 0x01: %02x" % self.register[0])
+        self.sing_reg_read(0x02)
+        if self.DEBUG: print("Reg 0x02: %02x" % self.register[0])
+        self.sing_reg_read(0x03)
+        if self.DEBUG: print("Reg 0x03: %02x" % self.register[0])
+        self.sing_reg_read(0x04)
+        if self.DEBUG: print("Reg 0x04: %02x" % self.register[0])
+        self.sing_reg_read(0x05)
+        if self.DEBUG: print("Reg 0x05: %02x" % self.register[0])
+        self.sing_reg_read(0x06)
+        if self.DEBUG: print("Reg 0x06: %02x" % self.register[0])
+        self.sing_reg_read(0x07)
+        if self.DEBUG: print("Reg 0x07: %02x" % self.register[0])
+        self.sing_reg_read(0x08)
+        if self.DEBUG: print("Reg 0x08: %02x" % self.register[0])
+        self.sing_reg_read(0x3A)
+        if self.DEBUG: print("Reg 0x3A: %02x" % self.register[0])
+        self.sing_reg_read(0x3B)
+        if self.DEBUG: print("Reg 0x3B: %02x" % self.register[0])
