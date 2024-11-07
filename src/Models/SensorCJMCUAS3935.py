@@ -28,7 +28,7 @@ class SensorCJMCUAS3935:
 
         if i2c is not None:
             self.address = address
-            # Imprime información de depuración si DEBUG es True
+
             if self.DEBUG:
                 print('Escaneando dispositivos I2C en el bus:')
                 print(self.i2c.scan())

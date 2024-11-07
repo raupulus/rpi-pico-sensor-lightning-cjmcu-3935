@@ -40,7 +40,7 @@
 from machine import Pin, I2C, SPI
 import utime
 from time import sleep_ms
-from Models.SensorCJMCUAS3935_3 import SensorCJMCUAS3935
+from Models.SensorCJMCUAS3935_4 import SensorCJMCUAS3935
 
 
 class Lightning:
@@ -132,7 +132,7 @@ class Lightning:
         elif reason == 3:
             # Ruido demasiado alto
 
-            sensor.set_noise_floor(self.get_noise_floor() + 1)
+            #sensor.set_noise_floor(self.get_noise_floor() + 1)
             # sensor.set_watchdog_threshold(sensor.get_watchdog_threshold() + 1)
             # sensor.set_spike_rejection(sensor.get_spike_rejection() + 1)
 
