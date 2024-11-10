@@ -49,16 +49,16 @@ En resumen, el sensor CJMCU AS3935 es una herramienta eficaz para la detección 
 
 La dirección del sensor es **0x03**
 
-| Pin del Sensor | Conexión           |
-|----------------|--------------------|
-| VCC            | 3.3V               |
-| GND            | GND                |
-| MOSI (SDA)     | PIN 20             |
-| SCL            | PIN 21             |
-| SI             | 3.3V               |
-| A0             | 3.3V               |
-| A1             | 3.3V               |
-| IRQ            | GPIO 22            |
+| Pin del Sensor | Conexión |
+|----------------|----------|
+| VCC            | 3.3V     |
+| GND            | GND      |
+| MOSI (SDA)     | PIN 8    |
+| SCL            | PIN 9    |
+| SI             | 3.3V     |
+| A0             | 3.3V     |
+| A1             | 3.3V     |
+| IRQ            | GPIO 22  |
 
 ### Conexión mediante SPI
 
@@ -81,6 +81,38 @@ La dirección del sensor es **0x03**
 | A1             | 3.3V               |
 | IRQ            | GPIO (Interrupción)|
 
+## Pantalla SSD1306
+
+Opcionalmente puedes utilizar una pantalla SSD1306 en la que ver que ha 
+encendido correctamente y además mostrará información del último rayo detectado.
+
+![Imagen de la pantalla SSD1306](docs/images/ssd1306.png "Imagen de la pantalla SSD1306")
+
+El esquema de conexión es muy simple:
+
+| Pin de la pantalla | Conexión |
+|--------------------|----------|
+| VCC                | 3.3V     |
+| GND                | GND      |
+| SDA                | PIN 8    |
+| SCL                | PIN 9    |
+
+En el proyecto, utilizo una con 128x64px que tiene la dirección para I2C: *0x3c*
+
+## Leds para simular rayos
+
+Se incluyen 3 Leds que simulan cada flash como si fueran rayos en los pines:
+
+- GPIO 13
+- GPIO 14
+- GPIO 15
+
+Cuando se producen eventos detectando relámpagos se encenderá este juego de
+luces para que se aprecie visualmente que ha sido detectado al menos un rayo.
+
+Su conexión es opcional, déjalos desconectados y simplemente no tendrás estos
+destellos.
+
 ## Contenido del Repositorio
 
 - **src/**: Código fuente del proyecto.
@@ -93,6 +125,8 @@ Para utilizar este proyecto, necesitarás:
 - **Hardware:**
   - Raspberry Pi Pico W.
   - Sensor CJMCU-AS3935.
+  - Pantalla SSD1306 128x64px
+  - 3 Leds
   - Cables de conexión.
 
 - **Software:**
