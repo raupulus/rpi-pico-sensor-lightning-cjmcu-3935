@@ -18,5 +18,8 @@ DEVICE_ID = 1
 # ¿Está en interior?
 INDOOR=True
 
+# Indica si muestra datos por un display
+DISPLAY_ENABLED=True
+
 # Indica si está en modo debug la aplicación
 DEBUG = False

@@ -1,4 +1,5 @@
 import gc
+import random
 from time import sleep_ms
 from Models.Api import Api
 from Models.RpiPico import RpiPico
@@ -21,14 +22,24 @@ controller = RpiPico(ssid=env.AP_NAME, password=env.AP_PASS, debug=env.DEBUG,
                      hostname="Lightning")
 
 sleep_ms(20)
+controller.led_on()
+sleep_ms(20)
 
-i2c = I2C(0, scl=Pin(21), sda=Pin(20), freq=400000)
+i2c = I2C(0, scl=Pin(9), sda=Pin(8), freq=400000)
 address = 0x03 # Dirección del dispositivo i2c para AS3935
 
+# Configuro los GPIO para los tres LEDs que simulan flashes
+led1 = Pin(13, Pin.OUT)
+led2 = Pin(14, Pin.OUT)
+led3 = Pin(15, Pin.OUT)
+leds = [led1, led2, led3]
 
+led1.high()
+led2.high()
+led3.high()
 
 # Inicializando pantalla OLED
-DISPLAY_ENABLED = True
+DISPLAY_ENABLED = env.DISPLAY_ENABLED
 
 if DISPLAY_ENABLED:
     oled_width = 128
@@ -55,6 +66,35 @@ if env.API_UPLOAD:
 
 sleep_ms(3000)
 
+led1.low()
+led2.low()
+led3.low()
+
+def simulate_random_lightning ():
+    """Función para simular flashes de relámpagos de forma aleatoria con 3 LEDs"""
+    # Generar un número aleatorio de flashes entre 10 y 25
+    total_flashes = random.randint(10, 25)
+
+    for _ in range(total_flashes):
+        # Elegir un LED aleatorio
+        led = random.choice(leds)
+
+        # Duración del flash (entre 150 y 350 ms)
+        delay = int(
+            random.uniform(0.15, 0.35) * 1000)  # Convertir a milisegundos
+
+        # Encender y apagar el LED
+        led.on()
+        sleep_ms(delay)
+        led.off()
+
+        # Pausa antes del siguiente flash (entre 50 y 100 ms)
+        pause = int(
+            random.uniform(0.05, 0.1) * 1000)  # Convertir a milisegundos
+        sleep_ms(pause)
+
+
+simulate_random_lightning()
 
 def thread0 ():
     """
@@ -64,6 +104,8 @@ def thread0 ():
     controller.led_on()
 
     if sensor.check_exist_strike():
+
+        simulate_random_lightning()
 
         if DISPLAY_ENABLED:
             last_strike = sensor.lightnings[0]
