@@ -4,9 +4,21 @@ Este repositorio contiene el código y los recursos necesarios para utilizar el 
 
 Sitio web del autor: [https://raupulus.dev](https://raupulus.dev)
 
-![Imagen del Proyecto](docs/images/img1.jpg "Imagen del Sensor de Rayos CJMCU-AS3935 para Raspberry Pi Pico con Micropython")
+![Imagen del Proyecto](docs/images/img1.jpeg "Imagen del Sensor de Rayos CJMCU-AS3935 para Raspberry Pi Pico con Micropython")
 
 Repository [https://gitlab.com/raupulus/rpi-pico-sensor-lightning-cjmcu-3935](https://gitlab.com/raupulus/rpi-pico-sensor-lightning-cjmcu-3935)
+
+![Imagen del Proyecto](docs/images/1.jpeg "Imagen del Proyecto detector de rayos CJMCU-3935")
+
+
+<p align="center">
+  <img src="docs/images/2.jpeg" alt="Proyecto detector de rayos CJMCU-3935" 
+height="150">
+  <img src="docs/images/3.jpeg" alt="Proyecto detector de rayos CJMCU-3935" 
+height="150">
+  <img src="docs/images/4.jpeg" alt="Proyecto detector de rayos CJMCU-3935" height="150">
+<img src="docs/images/5.jpeg" alt="Proyecto detector de rayos CJMCU-3935" height="150">
+</p>
 
 ## Sobre el sensor CJMCU AS3935
 
@@ -112,6 +124,34 @@ luces para que se aprecie visualmente que ha sido detectado al menos un rayo.
 
 Su conexión es opcional, déjalos desconectados y simplemente no tendrás estos
 destellos.
+
+## Diseño Modelo 3D
+
+Para el proyecto he creado un diseño en 3D del cual te puedes descargar el 
+modelo de las siguientes plataformas:
+
+[Thingiverse](https://www.thingiverse.com/thing:6828857)
+
+[Printables](https://www.printables.com/model/1070726-lightning-detector-project-with-cjmcuas3935-and-ra)
+
+[MakerWorld Bambulab](https://makerworld.com/es/models/780411#profileId-717402)
+
+<p align="center">
+  <img src="docs/images/3d/1.jpeg" alt="Diseño 3D plano de trabajo en 
+thinkercad" 
+height="150">
+  <img src="docs/images/3d/2.jpeg" alt="Planchas de impresión en bambulab" 
+height="150">
+  <img src="docs/images/3d/3.jpeg" alt="Diseño 3D Base" 
+height="150">
+  <img src="docs/images/3d/4.jpeg" alt="Diseño 3D Pararayos" height="150">
+<img src="docs/images/3d/5.jpeg" alt="Diseño 3D parte trasera" height="150">
+<img src="docs/images/3d/6.jpeg" alt="Diseño 3D base soporte" height="150">
+<img src="docs/images/3d/7.jpeg" alt="Diseño 3D caja para el sensor CJMCUAS3935" 
+height="150">
+<img src="docs/images/3d/8.jpeg" alt="Diseño 3D tapadera del sensor CJMCUAS3935" 
+height="150">
+</p>
 
 ## Contenido del Repositorio
 
